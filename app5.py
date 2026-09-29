@@ -148,27 +148,19 @@ def normalize_company_name(name):
 # ============================================================
 # 4. SELENIUM: DOWNLOADING DATA FROM AKSJEEIERE.NO
 # ============================================================
+import os
+
 def build_chrome_driver(download_dir, headless=True):
     """
     Creates a Chrome WebDriver configured to download files directly into
-    `download_dir` (this session's own folder), instead of the shared
-    system Downloads folder. This is the key piece that makes it safe for
-    several people to run the app on the server at the same time - each
-    session's browser only ever writes into its own folder.
-
-    Notes for server deployment:
-    - ChromeDriverManager().install() automatically picks the right driver
-      version for whatever Chrome version is installed on the machine (no
-      need to manually place a file and track versions).
-    - headless=True is required on a server (no graphical display there).
-      It's also recommended to test locally with headless=True, so
-      behavior matches what happens on the server.
+    `download_dir` (this session's own folder).
     """
     options = Options()
     if headless:
         options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
 
     options.add_experimental_option("prefs", {
@@ -178,10 +170,17 @@ def build_chrome_driver(download_dir, headless=True):
         "safebrowsing.enabled": True,
     })
 
-    service = Service(ChromeDriverManager().install())
+    # Перевіряємо, чи працюємо у середовищі Streamlit Cloud (Linux)
+    if os.path.exists("/usr/bin/chromium"):
+        options.binary_location = "/usr/bin/chromium"
+        service = Service("/usr/bin/chromedriver")
+    else:
+        # Для локальної розробки (на власному ПК)
+        from webdriver_manager.chrome import ChromeDriverManager
+        service = Service(ChromeDriverManager().install())
+
     driver = webdriver.Chrome(service=service, options=options)
     return driver
-
 
 def daselenium(company_name_input, session_folder, headless=True):
     """
