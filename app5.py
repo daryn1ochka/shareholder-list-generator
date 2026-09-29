@@ -151,11 +151,18 @@ def normalize_company_name(name):
 # ============================================================
 import os
 
+import os
+import time
+import random
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.ui import WebDriverWait, Select
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, WebDriverException
+
 def build_chrome_driver(download_dir, headless=True):
-    """
-    Creates a Chrome WebDriver configured to download files directly into
-    `download_dir` (this session's own folder).
-    """
     options = Options()
     if headless:
         options.add_argument("--headless=new")
@@ -172,12 +179,10 @@ def build_chrome_driver(download_dir, headless=True):
         "safebrowsing.enabled": True,
     })
 
-    # Перевіряємо, чи працюємо у середовищі Streamlit Cloud (Linux)
     if os.path.exists("/usr/bin/chromium"):
         options.binary_location = "/usr/bin/chromium"
         service = Service("/usr/bin/chromedriver")
     else:
-        # Для локальної розробки (на власному ПК)
         from webdriver_manager.chrome import ChromeDriverManager
         service = Service(ChromeDriverManager().install())
 
@@ -185,123 +190,111 @@ def build_chrome_driver(download_dir, headless=True):
     return driver
 
 def daselenium(company_name_input, session_folder, headless=True):
-    """
-    Logs into aksjeeiere.no, searches for the company, and downloads xlsx
-    files with the shareholder list for each year from 2014 to
-    (current year - 1). Files download directly into this session's own
-    folder (session_folder), so concurrent runs from different users never
-    collide.
-    """
     driver = None
+    wait = None
     try:
         driver = build_chrome_driver(download_dir=session_folder, headless=headless)
+        wait = WebDriverWait(driver, 10)
         print("✅ ChromeDriver started successfully")
 
-        driver.get("https://www.aksjeeiere.no/")
-        time.sleep(random.uniform(1, 3))
+        # Переходимо одразу на сторінку логіну
+        driver.get("https://www.aksjeeiere.no/login")
+        time.sleep(random.uniform(1, 2))
+
+        print(f"ℹ️ Current URL: {driver.current_url}")
 
         # --- Login ---
         try:
-             log_in = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, 'login') or contains(text(), 'Logg inn') or contains(text(), 'Log in')]"))
-    )
-             log_in.click()
-        except Exception as e:
-             print("⚠️ unable to find lohin button:", e)
-             raise
-
-        time.sleep(0.5)
-
-        try:
-            email_input = driver.find_element(By.XPATH, "//input[@id='email']")
+            email_input = wait.until(EC.presence_of_element_located((By.ID, "email")))
+            email_input.clear()
             email_input.send_keys(AKSJEEIERE_EMAIL)
 
-            time.sleep(0.5)
-
-            password_input = driver.find_element(By.XPATH, "//input[@id='password']")
+            password_input = driver.find_element(By.ID, "password")
+            password_input.clear()
             password_input.send_keys(AKSJEEIERE_PASSWORD)
 
-            time.sleep(0.5)
+            login_btn = driver.find_element(By.XPATH, "//input[@type='submit'] | //button[@type='submit']")
+            login_btn.click()
+            print("✅ Submitted login credentials")
+        except (NoSuchElementException, TimeoutException) as e:
+            print("⚠️ Could not find login fields directly, checking current page structure...")
+            raise e
 
-            login_input = driver.find_element(By.XPATH, "//input[@type='submit']")
-            login_input.click()
-        except NoSuchElementException:
-            print("⚠️ Could not find the login/password fields - check the login page structure")
-            raise
-
-        time.sleep(1)
+        # Перевірка авторизації
+        time.sleep(2)
 
         # --- Search for the company ---
         try:
-            search_bar = driver.find_element(By.ID, "q")
+            search_bar = wait.until(EC.presence_of_element_located((By.ID, "q")))
+            search_bar.clear()
             search_bar.send_keys(company_name_input)
-        except NoSuchElementException:
-            print("⚠️ Could not find the company search field ('q')")
+            print(f"✅ Entered search query: {company_name_input}")
+        except (NoSuchElementException, TimeoutException):
+            print("⚠️ Could not find search field 'q' after login")
             raise
 
-        time.sleep(0.5)
-
-        # Years to download data for: from 2014 to (current year - 1)
         current_year = time.localtime().tm_year
         downloaded_years = []
         skipped_years = []
 
         for year in range(2014, current_year):
             try:
-                dropdown = Select(driver.find_element(By.ID, "year"))
+                dropdown_elem = wait.until(EC.presence_of_element_located((By.ID, "year")))
+                dropdown = Select(dropdown_elem)
                 dropdown.select_by_visible_text(str(year))
-            except NoSuchElementException:
-                print(f"⚠️ Could not find the year dropdown for {year}, skipping")
+            except (NoSuchElementException, TimeoutException):
+                print(f"⚠️ Could not find year dropdown for {year}, skipping")
                 skipped_years.append(year)
                 continue
 
-            time.sleep(random.uniform(1, 3))
+            time.sleep(random.uniform(0.8, 1.5))
 
             try:
-                download_button = driver.find_element(
-                    By.XPATH,
-                    "//button[@class= 'sm:w-auto w-full sm:relative sm:flex items-center space-x-2 sm:rounded-r-md bg-sky-600 px-4 py-3 sm:px-4 sm:py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 bg-sky-600 text-white shadow-sm hover:bg-sky-500 focus-visible:outline-sky-600']"
-                )
+                # Шукаємо кнопку за типом або атрибутом submit замість довгого класу
+                download_button = driver.find_element(By.XPATH, "//button[@type='submit'] | //form//button")
                 download_button.click()
             except NoSuchElementException:
-                print(f"⚠️ Could not find the search button for {year}, skipping")
+                print(f"⚠️ Could not find search button for {year}, skipping")
                 skipped_years.append(year)
                 continue
 
             time.sleep(1)
 
             try:
-                # Link to download the result (xlsx)
-                link = driver.find_element(By.LINK_TEXT, "Last ned søkeresultat (xlsx)")
+                # Link to download xlsx
+                link = wait.until(EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "Last ned")))
                 link.click()
-                time.sleep(1.5)  # give the file time to download
+                time.sleep(2)  # Give time for file write
                 downloaded_years.append(year)
-            except NoSuchElementException:
-                # No data for this year - this is normal, not an error
-                print(f"ℹ️ No data for {year}, skipping")
+                print(f"✅ Downloaded data for {year}")
+            except (NoSuchElementException, TimeoutException):
+                print(f"ℹ️ No download link for {year}, skipping")
                 skipped_years.append(year)
                 continue
 
         print(f"✅ Years downloaded: {downloaded_years}")
         if skipped_years:
-            print(f"ℹ️ Years skipped (no data or elements on the page): {skipped_years}")
+            print(f"ℹ️ Years skipped: {skipped_years}")
 
-    except WebDriverException as e:
-        print(f"❌ Selenium/ChromeDriver error: {e}")
-        raise
     except Exception as e:
-        print(f"❌ Unexpected error while downloading data: {e}")
+        if driver:
+            # Зберігаємо скріншот та HTML у папку сесії для діагностики
+            screenshot_path = os.path.join(session_folder, "error.png")
+            driver.save_screenshot(screenshot_path)
+            print(f"📸 Saved error screenshot to: {screenshot_path}")
+            print(f"📄 Page Title on Error: {driver.title}")
+            print(f"🔗 Current URL on Error: {driver.current_url}")
+        print(f"❌ Error in main processing: {e}")
         raise
 
     finally:
         if driver is not None:
             try:
-                logout = driver.find_element(By.XPATH, "//a[@rel='nofollow']")
+                logout = driver.find_element(By.XPATH, "//a[contains(@href, 'logout') or @rel='nofollow']")
                 logout.click()
-            except Exception as e:
-                print("ℹ️ Logout link not found or not needed:", e)
+            except Exception:
+                pass
             driver.quit()
-        else:
-            print("ℹ️ Driver was never initialized, logout skipped.")
 
 
 # ============================================================
