@@ -187,7 +187,7 @@ def build_chrome_driver(download_dir, headless=True):
         service = Service(ChromeDriverManager().install())
 
         try:
-        driver = webdriver.Chrome(service=service, options=options)
+            driver = webdriver.Chrome(service=service, options=options)
         except Exception as e:
             print(f"❌ Chrome failed to start: {e}")
             if os.path.exists("chromedriver.log"):
