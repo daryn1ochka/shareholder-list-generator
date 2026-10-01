@@ -186,17 +186,18 @@ def build_chrome_driver(download_dir, headless=True):
         from webdriver_manager.chrome import ChromeDriverManager
         service = Service(ChromeDriverManager().install())
 
-        try:
-            driver = webdriver.Chrome(service=service, options=options)
-        except Exception as e:
-            print(f"❌ Chrome failed to start: {e}")
-            if os.path.exists("chromedriver.log"):
-                with open("chromedriver.log", "r", errors="replace") as f:
-                    print("─── chromedriver.log ───")
-                    print(f.read())
-                    print("────────────────────────")
-            raise
+    try:
+        driver = webdriver.Chrome(service=service, options=options)
+    except Exception as e:
+        print(f"❌ Chrome failed to start: {e}")
+        if os.path.exists("chromedriver.log"):
+            with open("chromedriver.log", "r", errors="replace") as f:
+                print("─── chromedriver.log ───")
+                print(f.read())
+                print("────────────────────────")
+        raise
     return driver
+
 
 def daselenium(company_name_input, session_folder, headless=True):
     driver = None
