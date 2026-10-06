@@ -207,29 +207,39 @@ def daselenium(company_name_input, session_folder, headless=True):
         wait = WebDriverWait(driver, 10)
         print("✅ ChromeDriver started successfully")
 
-        # Переходимо одразу на сторінку логіну
-        driver.get("https://www.aksjeeiere.no/login")
-        time.sleep(random.uniform(1, 2))
-
-        print(f"ℹ️ Current URL: {driver.current_url}")
+        driver.get("https://www.aksjeeiere.no/")
+        time.sleep(random.uniform(1, 3))
 
         # --- Login ---
         try:
-            email_input = wait.until(EC.presence_of_element_located((By.ID, "email")))
-            email_input.clear()
+            log_in = wait.until(EC.presence_of_element_located((
+                By.XPATH,
+                "//a[@class='text-slate-900 underline decoration-sky-300 hover:decoration-sky-600 hover:text-sky-800 text-sm inline-block']"
+            )))
+            log_in.click()
+        except (NoSuchElementException, TimeoutException):
+            print("⚠️ Could not find the 'Log in' button - the site structure may have changed")
+            raise
+
+        time.sleep(0.5)
+
+        try:
+            email_input = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@id='email']")))
             email_input.send_keys(AKSJEEIERE_EMAIL)
 
-            password_input = driver.find_element(By.ID, "password")
-            password_input.clear()
+            time.sleep(0.5)
+
+            password_input = driver.find_element(By.XPATH, "//input[@id='password']")
             password_input.send_keys(AKSJEEIERE_PASSWORD)
 
-            login_btn = driver.find_element(By.XPATH, "//input[@type='submit'] | //button[@type='submit']")
-            login_btn.click()
-            print("✅ Submitted login credentials")
-        except (NoSuchElementException, TimeoutException) as e:
-            print("⚠️ Could not find login fields directly, checking current page structure...")
-            raise e
+            time.sleep(0.5)
 
+            login_input = driver.find_element(By.XPATH, "//input[@type='submit']")
+            login_input.click()
+            print("✅ Submitted login credentials")
+        except (NoSuchElementException, TimeoutException):
+            print("⚠️ Could not find the login/password fields - check the login page structure")
+            raise
         # Перевірка авторизації
         time.sleep(2)
 
